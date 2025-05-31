@@ -7,6 +7,16 @@ import matplotlib.ticker as mtick
 st.title("📈 yfinance 기반 주식 추천 및 시가총액 분석")
 
 st.markdown("""
+### 추천등급 매핑 (영어 → 한국어)
+- **strong_buy** → 강력 매수  
+- **buy** → 매수  
+- **hold** → 중립  
+- **underperform** → 성능 저하  
+- **sell** → 매도  
+- **N/A** → 정보 없음
+
+---
+
 - 상단 슬라이더로 시가총액 순위 범위를 지정하세요 (예: 1위부터 200위까지)
 - 선택 범위 내 종목들의 추천 등급과 시가총액 데이터를 보여줍니다.
 """)
