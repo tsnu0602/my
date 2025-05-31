@@ -2,6 +2,7 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mtick
 
 st.title("📈 yfinance 기반 주식 추천 및 시가총액 분석")
 
@@ -10,9 +11,7 @@ st.markdown("""
 - 선택 범위 내 종목들의 추천 등급과 시가총액 데이터를 보여줍니다.
 """)
 
-# 샘플로 NYSE 시가총액 상위 200개 종목 티커 (여기서는 50개만 예시)
-# 실제 200개 이상은 yfinance가 한꺼번에 못 받으니, 필요하면 별도 파일로 받아와야 함
-# 간단한 예시로 50개만 사용
+# 샘플로 NYSE 시가총액 상위 50개 종목 티커 (필요시 확장 가능)
 symbols = [
     "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "BRK-B", "JPM", "V",
     "UNH", "HD", "MA", "PYPL", "BAC", "DIS", "ADBE", "CMCSA", "NFLX", "XOM",
@@ -21,7 +20,6 @@ symbols = [
     "LIN", "TMO", "UPS", "PM", "BA", "IBM", "MMM", "CAT", "RTX", "GE"
 ]
 
-# 시가총액 기준으로 정렬 전처리 (yfinance 정보 수집)
 data = []
 with st.spinner("📡 주식 정보 수집 중... (최대 50개)"):
     for symbol in symbols:
@@ -48,13 +46,9 @@ with st.spinner("📡 주식 정보 수집 중... (최대 50개)"):
 
 df = pd.DataFrame(data)
 
-# 시가총액 내림차순 정렬
 df = df.sort_values(by="시가총액", ascending=False).reset_index(drop=True)
-
-# 시가총액 순위 컬럼 추가
 df["시가총액순위"] = df.index + 1
 
-# 한글 추천 등급 변환 함수
 def rec_to_korean(rec):
     mapping = {
         "strong_buy": "강력 매수",
@@ -68,7 +62,6 @@ def rec_to_korean(rec):
 
 df["추천등급"] = df["추천등급(원문)"].apply(rec_to_korean)
 
-# 상호작용: 시가총액 순위 슬라이더 (1 ~ 최대 종목수)
 min_rank, max_rank = st.slider(
     "시가총액 순위 범위 선택",
     min_value=1,
@@ -77,18 +70,31 @@ min_rank, max_rank = st.slider(
     step=1
 )
 
-# 선택된 범위 내 데이터 필터링
 filtered_df = df[(df["시가총액순위"] >= min_rank) & (df["시가총액순위"] <= max_rank)].reset_index(drop=True)
 
 st.subheader(f"선택된 시가총액 순위 범위: {min_rank}위 ~ {max_rank}위")
 st.dataframe(filtered_df[["시가총액순위", "종목", "티커", "추천등급", "현재주가($)", "PER", "시가총액"]], use_container_width=True)
 
-# 시가총액 그래프 그리기
-st.subheader("시가총액 그래프")
-
+# 시가총액 그래프 그리기 (기업명 가독성 개선)
 fig, ax = plt.subplots(figsize=(10, 6))
-ax.barh(filtered_df["종목"], filtered_df["시가총액"] / 1e9, color='skyblue')
-ax.set_xlabel("시가총액 (십억 달러)")
-ax.invert_yaxis()  # 큰 값이 위로 오도록 반전
-ax.grid(axis="x", linestyle="--", alpha=0.7)
+
+def shorten_name(name, max_len=15):
+    return (name[:max_len] + '...') if len(name) > max_len else name
+
+labels = [shorten_name(name) for name in filtered_df["종목"]]
+
+bars = ax.barh(labels, filtered_df["시가총액"] / 1e9, color="#1f77b4", edgecolor="black", alpha=0.85)
+
+ax.xaxis.set_major_formatter(mtick.FormatStrFormatter('%.1fB'))
+ax.invert_yaxis()
+ax.set_xlabel("시가총액 (십억 달러)", fontsize=12, fontweight='bold')
+ax.set_title("선택된 기업 시가총액 순위별 막대그래프", fontsize=14, fontweight='bold', pad=15)
+ax.grid(axis='x', linestyle='--', alpha=0.5)
+
+for bar in bars:
+    width = bar.get_width()
+    ax.text(width + 0.5, bar.get_y() + bar.get_height()/2,
+            f'{width:.1f}B', va='center', fontsize=10, color='black')
+
+plt.tight_layout()
 st.pyplot(fig)
