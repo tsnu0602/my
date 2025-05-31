@@ -2,11 +2,12 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import yfinance as yf
+from datetime import date
 
 st.set_page_config(layout="wide")
 st.title("Top 50 시가총액 종목의 시가총액 변화")
 
-# 샘플로 S&P 500 상위 50개 종목 (티커 수동 지정 or 크롤링 가능)
+# 상위 50개 티커 수동 설정 (예시로 S&P 500 기준)
 top_50_tickers = [
     "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "BRK-B", "UNH", "JNJ",
     "V", "XOM", "PG", "MA", "LLY", "AVGO", "HD", "MRK", "PEP", "ABBV",
@@ -15,32 +16,38 @@ top_50_tickers = [
     "MS", "LIN", "AMGN", "NEE", "UPS", "PM", "RTX", "CVX", "BMY", "IBM"
 ]
 
-# 기간 선택
-period = st.selectbox("기간 선택", ["1mo", "3mo", "6mo", "1y", "2y"], index=2)
+# 날짜 범위 선택 (최대 5년)
+st.sidebar.header("기간 설정")
+start_date = st.sidebar.date_input("시작일", date.today().replace(year=date.today().year - 1))
+end_date = st.sidebar.date_input("종료일", date.today())
 
-# 시가총액 데이터를 가져옴
-@st.cache_data
-def get_market_caps(tickers, period="6mo"):
+if start_date >= end_date:
+    st.sidebar.error("시작일은 종료일보다 이전이어야 합니다.")
+
+# 시가총액 데이터 가져오기
+@st.cache_data(show_spinner=True)
+def get_market_caps(tickers, start, end):
     data = {}
     for ticker in tickers:
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period=period)
-        if not hist.empty:
-            try:
-                shares = stock.info.get("sharesOutstanding", None)
-                if shares:
-                    hist["Market Cap"] = hist["Close"] * shares
-                    data[ticker] = hist[["Market Cap"]]
-            except Exception as e:
-                print(f"Error for {ticker}: {e}")
+        try:
+            stock = yf.Ticker(ticker)
+            hist = stock.history(start=start, end=end)
+            shares = stock.info.get("sharesOutstanding", None)
+            if shares and not hist.empty:
+                hist["Market Cap"] = hist["Close"] * shares
+                data[ticker] = hist[["Market Cap"]]
+        except Exception as e:
+            print(f"Error fetching data for {ticker}: {e}")
     return data
 
-market_caps = get_market_caps(top_50_tickers, period)
+# 데이터 불러오기
+market_caps = get_market_caps(top_50_tickers, start_date, end_date)
 
-# 시각화
-st.subheader(f"기간별 시가총액 변화 ({period})")
+# 종목 선택
+st.subheader("시가총액 변화 차트")
 selected = st.multiselect("종목 선택", options=top_50_tickers, default=top_50_tickers[:10])
 
+# 시각화
 if selected:
     df_plot = pd.DataFrame()
     for ticker in selected:
@@ -50,14 +57,17 @@ if selected:
             temp["Ticker"] = ticker
             df_plot = pd.concat([df_plot, temp])
 
-    fig = px.line(
-        df_plot,
-        x="Date",
-        y="Market Cap",
-        color="Ticker",
-        title="시가총액 변화",
-        labels={"Market Cap": "시가총액 (USD)"}
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    if not df_plot.empty:
+        fig = px.line(
+            df_plot,
+            x="Date",
+            y="Market Cap",
+            color="Ticker",
+            title=f"{start_date} ~ {end_date} 시가총액 변화",
+            labels={"Market Cap": "시가총액 (USD)"}
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("선택한 기간에 데이터가 없습니다.")
 else:
     st.warning("하나 이상의 종목을 선택하세요.")
