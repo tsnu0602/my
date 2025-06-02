@@ -1,13 +1,16 @@
 import streamlit as st
 import requests
 import pandas as pd
+import openai
 
-# Bing News API 설정
-API_KEY = "YOUR_BING_API_KEY"  # ← 여기에 Bing API 키를 입력하세요
-ENDPOINT = "https://api.bing.microsoft.com/v7.0/news/search"
+# 🔐 API 키 설정
+BING_API_KEY = st.secrets["BING_API_KEY"] if "BING_API_KEY" in st.secrets else st.text_input("Bing API Key 입력", type="password")
+OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"] if "OPENAI_API_KEY" in st.secrets else st.text_input("OpenAI API Key 입력", type="password")
+openai.api_key = OPENAI_API_KEY
 
+# 앱 설정
 st.set_page_config(layout="wide")
-st.title("🌍 글로벌 정세 및 뉴스 분석")
+st.title("🌍 글로벌 정세 및 뉴스 분석 + AI 요약")
 
 st.markdown("""
 ### 🧭 왜 정세 분석이 중요한가요?
@@ -19,7 +22,7 @@ st.markdown("""
 - **환율·무역분쟁** → 수출 중심 기업 주가 변동  
 - **정치적 변화** → 산업 정책 변화로 섹터별 영향  
 
-아래에서 주요 이슈별 뉴스를 검색하고 종목 분석에 반영해보세요.
+아래에서 주요 이슈별 뉴스를 검색하고, AI 요약 기능을 통해 빠르게 핵심만 파악해보세요.
 """)
 
 # 키워드 선택
@@ -29,17 +32,21 @@ topic = st.selectbox("🔍 보고 싶은 글로벌 이슈를 선택하세요", [
 
 # 뉴스 검색 함수
 def get_news(query):
-    headers = {"Ocp-Apim-Subscription-Key": API_KEY}
+    headers = {"Ocp-Apim-Subscription-Key": BING_API_KEY}
     params = {"q": query, "count": 5, "mkt": "ko-KR"}
     try:
-        res = requests.get(ENDPOINT, headers=headers, params=params)
+        res = requests.get("https://api.bing.microsoft.com/v7.0/news/search", headers=headers, params=params)
+        if res.status_code != 200:
+            st.error(f"뉴스 API 오류: {res.status_code}")
+            return []
         articles = res.json().get("value", [])
         return [
             {
                 "제목": a["name"],
                 "요약": a["description"],
                 "링크": a["url"],
-                "출처": a["provider"][0]["name"] if "provider" in a else ""
+                "출처": a.get("provider", [{}])[0].get("name", ""),
+                "내용": a.get("description", "")
             } for a in articles
         ]
     except Exception as e:
@@ -51,13 +58,27 @@ st.markdown(f"### 🔎 '{topic}' 관련 최신 뉴스")
 articles = get_news(topic)
 
 if articles:
-    for a in articles:
-        st.markdown(f"#### 🔹 [{a['제목']}]({a['링크']})")
-        st.markdown(f"_{a['출처']}_")
-        st.markdown(f"{a['요약']}")
-        st.markdown("---")
+    for idx, a in enumerate(articles):
+        with st.expander(f"🔹 {a['제목']}"):
+            st.markdown(f"**출처**: {a['출처']}  \n**요약**: {a['요약']}  \n[원문 보기]({a['링크']})")
+
+            if OPENAI_API_KEY and st.button(f"AI 요약 보기 (뉴스 {idx+1})", key=f"summary_btn_{idx}"):
+                with st.spinner("AI가 요약 중입니다..."):
+                    try:
+                        response = openai.ChatCompletion.create(
+                            model="gpt-4",
+                            messages=[
+                                {"role": "system", "content": "아래 뉴스 내용을 간결하고 분석적으로 요약해줘."},
+                                {"role": "user", "content": a['내용']}
+                            ]
+                        )
+                        summary = response.choices[0].message.content.strip()
+                        st.success("📄 AI 요약 결과:")
+                        st.write(summary)
+                    except Exception as e:
+                        st.error(f"OpenAI 요약 실패: {e}")
 else:
-    st.warning("관련 뉴스를 불러오지 못했습니다.")
+    st.warning("관련 뉴스를 불러오지 못했습니다. API 키를 확인하세요.")
 
 # 해석 가이드
 st.markdown("### 💡 해석 가이드")
@@ -70,5 +91,5 @@ elif topic == "원유 가격":
 elif topic == "반도체 산업":
     st.info("공급망 이슈나 수요 회복은 반도체 시총에 큰 영향을 줍니다. 삼성전자, TSMC, 엔비디아 등 주목.")
 
-# 사용자 분석용 힌트
+# 사용자 분석 힌트
 st.markdown("☑️ 이 뉴스를 보고 어떤 종목이 영향을 받을지 직접 분석해보세요.")
