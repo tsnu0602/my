@@ -3,3 +3,6 @@ yfinance
 pandas
 matplotlib
 plotly
+streamlit
+requests
+pandas
