@@ -1,15 +1,15 @@
 import streamlit as st
+st.set_page_config(layout="wide")  # <-- 반드시 import 직후, 가장 먼저 호출
+
 import requests
 import pandas as pd
 import openai
 
-# 🔐 API 키 설정
-BING_API_KEY = st.secrets["BING_API_KEY"] if "BING_API_KEY" in st.secrets else st.text_input("Bing API Key 입력", type="password")
-OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"] if "OPENAI_API_KEY" in st.secrets else st.text_input("OpenAI API Key 입력", type="password")
+# API 키 입력 받기 (secrets 혹은 입력창)
+BING_API_KEY = st.secrets.get("BING_API_KEY") or st.text_input("Bing API Key 입력", type="password")
+OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY") or st.text_input("OpenAI API Key 입력", type="password")
 openai.api_key = OPENAI_API_KEY
 
-# 앱 설정
-st.set_page_config(layout="wide")
 st.title("🌍 글로벌 정세 및 뉴스 분석 + AI 요약")
 
 st.markdown("""
@@ -25,12 +25,10 @@ st.markdown("""
 아래에서 주요 이슈별 뉴스를 검색하고, AI 요약 기능을 통해 빠르게 핵심만 파악해보세요.
 """)
 
-# 키워드 선택
 topic = st.selectbox("🔍 보고 싶은 글로벌 이슈를 선택하세요", [
     "미국 금리", "우크라이나 전쟁", "중국 경기", "환율", "기술주 조정", "원유 가격", "인플레이션", "반도체 산업"
 ])
 
-# 뉴스 검색 함수
 def get_news(query):
     headers = {"Ocp-Apim-Subscription-Key": BING_API_KEY}
     params = {"q": query, "count": 5, "mkt": "ko-KR"}
@@ -53,7 +51,6 @@ def get_news(query):
         st.error(f"뉴스를 불러오는 중 오류 발생: {e}")
         return []
 
-# 뉴스 출력
 st.markdown(f"### 🔎 '{topic}' 관련 최신 뉴스")
 articles = get_news(topic)
 
@@ -80,7 +77,6 @@ if articles:
 else:
     st.warning("관련 뉴스를 불러오지 못했습니다. API 키를 확인하세요.")
 
-# 해석 가이드
 st.markdown("### 💡 해석 가이드")
 if topic == "미국 금리":
     st.info("미국 금리가 오르면 기술주, 성장주는 시가총액이 하락할 가능성이 높습니다. 반면 은행주는 수익성이 개선되어 상승할 수 있습니다.")
@@ -91,5 +87,4 @@ elif topic == "원유 가격":
 elif topic == "반도체 산업":
     st.info("공급망 이슈나 수요 회복은 반도체 시총에 큰 영향을 줍니다. 삼성전자, TSMC, 엔비디아 등 주목.")
 
-# 사용자 분석 힌트
 st.markdown("☑️ 이 뉴스를 보고 어떤 종목이 영향을 받을지 직접 분석해보세요.")
