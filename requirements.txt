@@ -7,14 +7,7 @@ requests
 
 # 뉴스 API 호출용
 newsapi-python
-requests
-
-# 데이터 처리
-pandas
 
 # 날짜 및 시간 처리
 python-dateutil
-
-# 선택적으로 사용할 수 있는 시각화 라이브러리
-matplotlib
-plotly
+openai
