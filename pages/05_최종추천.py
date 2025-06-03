@@ -1,58 +1,72 @@
 import streamlit as st
+import openai
 import requests
+import yfinance as yf
+from datetime import datetime, timedelta
 
-st.set_page_config(layout="wide")
-st.title("🌍 글로벌 이슈 기반 종목 추천 및 뉴스 분석")
+# 🔐 API 키 불러오기
+openai.api_key = st.secrets["openai_api_key"]
+newsdata_key = st.secrets["newsdata_api_key"]
 
-API_KEY = "9f946554ab7f4bee8adbd2135abfa423"
-
-issues = {
-    "미국 금리 인상": {
-        "query": "미국 금리 인상",
-        "추천 종목": ["JPMorgan Chase", "Bank of America"],
-        "이유": "금리 상승은 은행 수익성 개선 → 금융주 수혜"
-    },
-    "기술주 조정": {
-        "query": "기술주 조정",
-        "추천 종목": ["Apple", "NVIDIA", "Microsoft"],
-        "이유": "고평가 기술주는 금리 변화에 민감함 → 조정 우려"
-    },
-    "우크라이나 전쟁": {
-        "query": "우크라이나 전쟁",
-        "추천 종목": ["Lockheed Martin", "Exxon Mobil"],
-        "이유": "전쟁은 방산, 에너지주 상승 요인"
-    },
-    "중국 경기 부진": {
-        "query": "중국 경기 부진",
-        "추천 종목": ["Alibaba", "TSMC"],
-        "이유": "중국 관련 종목은 경기 침체 시 타격"
-    },
+# 관심 종목 예시
+STOCK_LIST = {
+    "AAPL": "Apple",
+    "MSFT": "Microsoft",
+    "NVDA": "Nvidia",
+    "GOOGL": "Alphabet",
+    "AMZN": "Amazon"
 }
 
-# 선택
-selected = st.selectbox("🔍 현재 주목하고 있는 글로벌 이슈를 선택하세요", list(issues.keys()))
-query = issues[selected]["query"]
+def get_news(ticker):
+    url = f"https://newsdata.io/api/1/news?apikey={newsdata_key}&q={ticker}&language=en&category=business"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+        return [f"- [{a['title']}]({a['link']})" for a in data.get("results", [])[:3]]
+    except Exception as e:
+        return [f"뉴스 로딩 실패: {e}"]
 
-# 뉴스 검색
-st.subheader(f"📰 '{query}' 관련 실시간 뉴스")
-url = "https://api.bing.microsoft.com/v7.0/news/search"
-headers = {"Ocp-Apim-Subscription-Key": API_KEY}
-params = {"q": query, "count": 5, "mkt": "ko-KR"}
+def get_gpt_analysis(ticker, news_list):
+    news_text = "\n".join(news_list)
+    prompt = f"""
+    다음은 {ticker} 관련 최근 뉴스입니다:\n{news_text}
+    이 정보를 바탕으로 {ticker} 종목에 대한 현재 투자 기회를 분석해 주세요.
+    추천 여부와 이유를 포함해 투자 관점에서 300자 이상 설명해 주세요.
+    """
+    try:
+        res = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7
+        )
+        return res.choices[0].message.content.strip()
+    except Exception as e:
+        return f"GPT 분석 실패: {e}"
 
-try:
-    res = requests.get(url, headers=headers, params=params)
-    res.raise_for_status()
-    articles = res.json().get("value", [])
-    for article in articles:
-        st.markdown(f"### [{article['name']}]({article['url']})")
-        st.caption(article.get("provider", [{}])[0].get("name", ""))
-        st.write(article.get("description", ""))
-        st.markdown("---")
-except Exception as e:
-    st.error("뉴스를 불러오는데 문제가 발생했습니다.")
-    st.exception(e)
+def plot_stock(ticker):
+    end = datetime.today()
+    start = end - timedelta(days=365)
+    df = yf.download(ticker, start=start, end=end)
+    if df.empty:
+        st.warning("주가 데이터를 불러올 수 없습니다.")
+        return
+    st.line_chart(df["Close"])
 
-# 추천 종목 및 이유
-st.subheader("✅ 종목 추천 및 분석")
-st.markdown("**추천 종목:** " + ", ".join(issues[selected]["추천 종목"]))
-st.info("추천 이유: " + issues[selected]["이유"])
+# Streamlit 페이지
+st.title("📰 뉴스 기반 종목 추천")
+selected = st.selectbox("📌 종목 선택", list(STOCK_LIST.keys()), format_func=lambda x: f"{x} - {STOCK_LIST[x]}")
+
+with st.spinner("🔎 뉴스와 분석을 불러오는 중..."):
+    news = get_news(selected)
+    analysis = get_gpt_analysis(selected, news)
+
+st.subheader(f"📈 {selected} 주가 차트")
+plot_stock(selected)
+
+st.subheader("🗞 관련 뉴스")
+for item in news:
+    st.markdown(item)
+
+st.subheader("💡 GPT 투자 분석")
+st.write(analysis)
