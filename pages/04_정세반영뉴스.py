@@ -2,44 +2,64 @@ import streamlit as st
 import openai
 import requests
 
-# OpenAI 키 설정
-client = openai.OpenAI(api_key=st.secrets["openai_api_key"])
+# OpenAI 및 NewsData API 키 불러오기 (secrets.toml에 저장되어 있어야 함)
+openai.api_key = st.secrets["openai_api_key"]
+NEWS_API_KEY = st.secrets["newsdata_api_key"]
 
-# NewsData API로 뉴스 불러오기
+# 뉴스 불러오기 함수
 def get_news(query="stock", language="en", country="us"):
-    api_key = st.secrets["newsdata_api_key"]
-    url = f"https://newsdata.io/api/1/news?apikey={api_key}&q={query}&language={language}&country={country}"
-    response = requests.get(url)
-    if response.status_code == 200:
-        return response.json().get("results", [])
-    else:
-        st.error("뉴스 로딩 실패")
+    url = f"https://newsdata.io/api/1/news?apikey={NEWS_API_KEY}&q={query}&language={language}&country={country}"
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            return response.json().get("results", [])
+        else:
+            st.error(f"뉴스 API 오류: {response.status_code}")
+            return []
+    except Exception as e:
+        st.error(f"뉴스를 불러오는 중 오류 발생: {e}")
         return []
 
-# GPT 분석 함수 (최신 방식)
-def analyze_news_with_gpt(news_title, news_content):
-    full_text = f"뉴스 제목: {news_title}\n내용: {news_content}\n\n이 뉴스가 주식 시장에 어떤 영향을 줄 수 있을지 분석해줘."
-    completion = client.chat.completions.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "당신은 경제 전문가입니다."},
-            {"role": "user", "content": full_text}
-        ],
-        temperature=0.7,
-    )
-    return completion.choices[0].message.content
+# GPT 분석 함수 (OpenAI >= 1.0.0 방식)
+def gpt_analysis(title, content):
+    prompt = f"""
+    다음은 주식 관련 뉴스입니다.
+
+    제목: {title}
+    내용: {content}
+
+    위 뉴스가 주식 시장에 미칠 영향과 추천 종목이 있다면 예측 및 근거를 300자 이상으로 설명해주세요.
+    """
+    try:
+        client = openai.OpenAI(api_key=openai.api_key)
+        completion = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "당신은 주식 분석가입니다."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+        )
+        return completion.choices[0].message.content.strip()
+    except Exception as e:
+        return f"GPT 분석 실패: {e}"
 
 # Streamlit UI
-st.title("📈 정세 반영 뉴스 기반 주식 분석")
+st.title("📰 뉴스 기반 주식 분석 및 종목 추천")
+query = st.text_input("🔍 분석할 키워드를 입력하세요", "반도체")
 
-query = st.text_input("뉴스 키워드를 입력하세요", "삼성전자")
 if query:
-    articles = get_news(query=query)
-    for article in articles[:3]:
-        st.subheader(article["title"])
-        st.write(article["description"])
-        st.write(f"🕒 {article['pubDate']}")
-        with st.spinner("GPT 분석 중..."):
-            analysis = analyze_news_with_gpt(article["title"], article["description"])
-        st.success(analysis)
-        st.markdown("---")
+    with st.spinner("뉴스를 불러오는 중..."):
+        news_list = get_news(query=query)
+
+    if news_list:
+        for i, article in enumerate(news_list[:3]):
+            st.subheader(f"🗞️ {article['title']}")
+            st.write(article["description"] or "내용 없음")
+            st.caption(f"🕒 {article['pubDate']}")
+            with st.spinner("GPT가 분석 중입니다..."):
+                analysis = gpt_analysis(article["title"], article["description"])
+            st.success(analysis)
+            st.markdown("---")
+    else:
+        st.warning("뉴스를 찾을 수 없습니다.")
