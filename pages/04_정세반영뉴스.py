@@ -5,11 +5,11 @@ import requests
 import datetime
 import plotly.graph_objs as go
 
-# API 키 불러오기
+# 🔐 API 키 불러오기 (secrets.toml에 저장되어 있어야 함)
 openai.api_key = st.secrets["openai_api_key"]
 NEWS_API_KEY = st.secrets["newsdata_api_key"]
 
-# 종목 선택
+# 🎯 종목 선택
 st.title("📊 종목별 주가, 뉴스 및 GPT 분석")
 stock_map = {
     "Apple": "AAPL",
@@ -21,20 +21,23 @@ stock_map = {
 stock_name = st.selectbox("분석할 종목을 선택하세요", list(stock_map.keys()))
 ticker = stock_map[stock_name]
 
-# 날짜 선택
+# 📅 날짜 선택
 end_date = datetime.date.today()
 start_date = st.date_input("시작 날짜 선택", end_date - datetime.timedelta(days=90))
 
-# 주가 데이터 가져오기
+# 📈 주가 데이터 가져오기
 stock_data = yf.download(ticker, start=start_date, end=end_date)
 
-# 주가 차트 출력
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=stock_data.index, y=stock_data['Close'], mode='lines', name='종가'))
-fig.update_layout(title=f"{stock_name} ({ticker}) 주가 차트", xaxis_title="날짜", yaxis_title="가격")
-st.plotly_chart(fig)
+if stock_data.empty:
+    st.error("❌ 주가 데이터를 불러올 수 없습니다. 날짜를 다시 선택해 주세요.")
+else:
+    # 📊 주가 차트 출력
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=stock_data.index, y=stock_data['Close'], mode='lines', name='종가'))
+    fig.update_layout(title=f"{stock_name} ({ticker}) 주가 차트", xaxis_title="날짜", yaxis_title="가격")
+    st.plotly_chart(fig)
 
-# 뉴스 불러오기
+# 📰 뉴스 불러오기
 def fetch_news(keyword):
     url = f"https://newsdata.io/api/1/news?apikey={NEWS_API_KEY}&q={keyword}&language=en"
     try:
@@ -63,8 +66,7 @@ if news_list:
         이 뉴스가 주식에 어떤 영향을 줄지 예측하고, 투자자에게 의미 있는 분석을 300자 이상으로 작성하세요.
         """
         try:
-            client = openai.OpenAI(api_key=openai.api_key)
-            completion = client.chat.completions.create(
+            response = openai.ChatCompletion.create(
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": "당신은 금융 시장 분석가입니다."},
@@ -72,7 +74,7 @@ if news_list:
                 ],
                 temperature=0.7
             )
-            analysis = completion.choices[0].message.content.strip()
+            analysis = response.choices[0].message["content"].strip()
             st.success(analysis)
         except Exception as e:
             st.error(f"GPT 분석 오류: {e}")
