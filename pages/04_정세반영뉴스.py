@@ -1,68 +1,81 @@
 import streamlit as st
 import openai
+import yfinance as yf
 import requests
+import datetime
+import plotly.graph_objs as go
 
-# API 키 설정 (secrets.toml에 저장되어 있어야 함)
+# API 키 불러오기
 openai.api_key = st.secrets["openai_api_key"]
 NEWS_API_KEY = st.secrets["newsdata_api_key"]
 
-# 뉴스 불러오기 함수
-def get_news(query="Apple", language="en", country="us"):
-    url = f"https://newsdata.io/api/1/news?apikey={NEWS_API_KEY}&q={query}&language={language}&country={country}"
+# 종목 선택
+st.title("📊 종목별 주가, 뉴스 및 GPT 분석")
+stock_map = {
+    "Apple": "AAPL",
+    "Tesla": "TSLA",
+    "Amazon": "AMZN",
+    "Google": "GOOGL",
+    "Microsoft": "MSFT"
+}
+stock_name = st.selectbox("분석할 종목을 선택하세요", list(stock_map.keys()))
+ticker = stock_map[stock_name]
+
+# 날짜 선택
+end_date = datetime.date.today()
+start_date = st.date_input("시작 날짜 선택", end_date - datetime.timedelta(days=90))
+
+# 주가 데이터 가져오기
+stock_data = yf.download(ticker, start=start_date, end=end_date)
+
+# 주가 차트 출력
+fig = go.Figure()
+fig.add_trace(go.Scatter(x=stock_data.index, y=stock_data['Close'], mode='lines', name='종가'))
+fig.update_layout(title=f"{stock_name} ({ticker}) 주가 차트", xaxis_title="날짜", yaxis_title="가격")
+st.plotly_chart(fig)
+
+# 뉴스 불러오기
+def fetch_news(keyword):
+    url = f"https://newsdata.io/api/1/news?apikey={NEWS_API_KEY}&q={keyword}&language=en"
     try:
         response = requests.get(url)
-        if response.status_code == 200:
-            return response.json().get("results", [])
-        else:
-            st.error(f"뉴스 API 오류: {response.status_code}")
-            return []
+        return response.json().get("results", [])
     except Exception as e:
-        st.error(f"뉴스를 불러오는 중 오류 발생: {e}")
+        st.error(f"뉴스 로딩 오류: {e}")
         return []
 
-# GPT 분석 함수
-def gpt_analysis(title, content):
-    prompt = f"""
-    다음은 주식 관련 뉴스입니다.
+st.subheader("📰 관련 뉴스 & GPT 분석")
 
-    제목: {title}
-    내용: {content}
+news_list = fetch_news(stock_name)
+if news_list:
+    for news in news_list[:3]:
+        st.markdown(f"#### {news['title']}")
+        st.write(news.get("description", "설명 없음"))
+        st.caption(news.get("pubDate", "날짜 정보 없음"))
 
-    위 뉴스가 주식 시장에 미칠 영향과 추천 종목이 있다면 예측 및 근거를 300자 이상으로 설명해주세요.
-    """
-    try:
-        client = openai.OpenAI(api_key=openai.api_key)
-        completion = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "당신은 주식 분석가입니다."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-        )
-        return completion.choices[0].message.content.strip()
-    except Exception as e:
-        return f"GPT 분석 실패: {e}"
+        # GPT 분석
+        prompt = f"""
+        다음은 {stock_name}에 대한 뉴스 기사입니다.
 
-st.title("📈 뉴스 기반 주식 추천 및 분석")
+        제목: {news['title']}
+        내용: {news.get('description', '')}
 
-# 선택 가능한 종목 리스트
-stock_options = ["Apple", "Tesla", "Microsoft", "Amazon", "Google"]
-
-selected_stock = st.selectbox("종목을 선택하세요", stock_options)
-
-if selected_stock:
-    with st.spinner(f"{selected_stock} 관련 뉴스를 불러오는 중..."):
-        news_items = get_news(query=selected_stock)
-
-    if news_items:
-        for article in news_items[:3]:
-            st.subheader(article['title'])
-            st.write(article.get('description', '내용 없음'))
-            st.caption(article.get('pubDate', '날짜 정보 없음'))
-            with st.spinner("GPT가 분석 중입니다..."):
-                analysis = gpt_analysis(article['title'], article.get('description', ''))
+        이 뉴스가 주식에 어떤 영향을 줄지 예측하고, 투자자에게 의미 있는 분석을 300자 이상으로 작성하세요.
+        """
+        try:
+            client = openai.OpenAI(api_key=openai.api_key)
+            completion = client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": "당신은 금융 시장 분석가입니다."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7
+            )
+            analysis = completion.choices[0].message.content.strip()
             st.success(analysis)
-            st.markdown("---")
-    else:
-        st.warning("뉴스를 찾을 수 없습니다.")
+        except Exception as e:
+            st.error(f"GPT 분석 오류: {e}")
+        st.markdown("---")
+else:
+    st.warning("관련 뉴스를 찾을 수 없습니다.")
