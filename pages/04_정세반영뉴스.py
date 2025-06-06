@@ -99,3 +99,32 @@ if news_list:
         st.markdown("---")
 else:
     st.warning("관련 뉴스를 찾을 수 없습니다.")
+    # 주가 데이터 불러오기
+stock_data = yf.download(ticker, start=start_date, end=end_date)
+
+st.subheader("📈 주가 차트")
+
+if stock_data.empty:
+    st.error("📉 주가 데이터를 불러오지 못했습니다. 날짜를 바꿔보세요.")
+else:
+    # 'Close' 컬럼이 있는지 확인
+    if "Close" not in stock_data.columns:
+        st.error("📉 'Close' 가격 정보가 없습니다.")
+    else:
+        stock_data = stock_data.dropna(subset=["Close"])
+        stock_data.reset_index(inplace=True)
+
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=stock_data["Date"],
+            y=stock_data["Close"],
+            mode="lines",
+            name="종가"
+        ))
+        fig.update_layout(
+            title=f"{stock_name} ({ticker}) 주가 차트",
+            xaxis_title="날짜",
+            yaxis_title="가격"
+        )
+        st.plotly_chart(fig)
+
