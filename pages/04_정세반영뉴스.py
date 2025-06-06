@@ -1,60 +1,45 @@
 import streamlit as st
-st.set_page_config(layout="wide")
+import openai
+import requests
 
-st.title("🌍 글로벌 정세 및 뉴스 분석 + AI 요약 (API 없이)")
+# OpenAI 키 설정
+client = openai.OpenAI(api_key=st.secrets["openai_api_key"])
 
-st.markdown("""
-### 🧭 왜 정세 분석이 중요한가요?
+# NewsData API로 뉴스 불러오기
+def get_news(query="stock", language="en", country="us"):
+    api_key = st.secrets["newsdata_api_key"]
+    url = f"https://newsdata.io/api/1/news?apikey={api_key}&q={query}&language={language}&country={country}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        return response.json().get("results", [])
+    else:
+        st.error("뉴스 로딩 실패")
+        return []
 
-세계 경제와 정치 상황은 기업 가치와 시가총액에 큰 영향을 줍니다.
-...
-""")
+# GPT 분석 함수 (최신 방식)
+def analyze_news_with_gpt(news_title, news_content):
+    full_text = f"뉴스 제목: {news_title}\n내용: {news_content}\n\n이 뉴스가 주식 시장에 어떤 영향을 줄 수 있을지 분석해줘."
+    completion = client.chat.completions.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": "당신은 경제 전문가입니다."},
+            {"role": "user", "content": full_text}
+        ],
+        temperature=0.7,
+    )
+    return completion.choices[0].message.content
 
-topic = st.selectbox("🔍 보고 싶은 글로벌 이슈를 선택하세요", [
-    "미국 금리", "우크라이나 전쟁", "중국 경기", "환율", "기술주 조정", "원유 가격", "인플레이션", "반도체 산업"
-])
+# Streamlit UI
+st.title("📈 정세 반영 뉴스 기반 주식 분석")
 
-# 더미 뉴스 데이터 (API 없이)
-dummy_news = {
-    "미국 금리": [
-        {
-            "제목": "미국 금리 인상 가능성 높아",
-            "요약": "최근 경제 지표가 강세를 보여 미국 금리 인상 가능성이 높아졌습니다.",
-            "출처": "더미 뉴스",
-            "링크": "https://example.com/news1",
-            "내용": "미국 연방준비제도(Fed)가 금리를 인상할 가능성이 높아지면서 금융시장이 반응하고 있습니다..."
-        }
-    ],
-    "우크라이나 전쟁": [
-        {
-            "제목": "우크라이나 전쟁 장기화 조짐",
-            "요약": "전쟁이 장기화되면서 글로벌 경제에도 불확실성이 커지고 있습니다.",
-            "출처": "더미 뉴스",
-            "링크": "https://example.com/news2",
-            "내용": "우크라이나와 러시아 간 전쟁이 장기화되고 있으며, 국제사회는 긴장감을 유지하고 있습니다..."
-        }
-    ],
-    # 기타 토픽도 필요한 만큼 추가 가능
-}
-
-st.markdown(f"### 🔎 '{topic}' 관련 최신 뉴스")
-
-articles = dummy_news.get(topic, [])
-
-if articles:
-    for a in articles:
-        st.markdown(f"#### 🔹 [{a['제목']}]({a['링크']})")
-        st.markdown(f"_{a['출처']}_")
-        st.markdown(a['요약'])
+query = st.text_input("뉴스 키워드를 입력하세요", "삼성전자")
+if query:
+    articles = get_news(query=query)
+    for article in articles[:3]:
+        st.subheader(article["title"])
+        st.write(article["description"])
+        st.write(f"🕒 {article['pubDate']}")
+        with st.spinner("GPT 분석 중..."):
+            analysis = analyze_news_with_gpt(article["title"], article["description"])
+        st.success(analysis)
         st.markdown("---")
-else:
-    st.warning("해당 주제의 뉴스가 없습니다.")
-
-st.markdown("### 💡 해석 가이드")
-if topic == "미국 금리":
-    st.info("미국 금리가 오르면 기술주, 성장주는 시가총액이 하락할 가능성이 높습니다. 반면 은행주는 수익성이 개선되어 상승할 수 있습니다.")
-elif topic == "우크라이나 전쟁":
-    st.info("전쟁 장기화 시 방산주, 에너지주는 수혜를 볼 수 있으며, 글로벌 리스크 확대는 전체 시장 하락으로 이어질 수 있습니다.")
-# 기타 가이드도 동일하게 유지
-
-st.markdown("☑️ 이 뉴스를 보고 어떤 종목이 영향을 받을지 직접 분석해보세요.")
