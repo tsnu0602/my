@@ -11,8 +11,4 @@ newsapi-python
 # 날짜 및 시간 처리
 python-dateutil
 openai
-streamlit
-openai==0.28.1
-yfinance
-requests
-plotly
+openai>=1.0.0
