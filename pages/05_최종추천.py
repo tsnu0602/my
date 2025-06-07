@@ -1,16 +1,19 @@
 import streamlit as st
-import openai
-import yfinance as yf
-import requests
 import datetime
-import plotly.graph_objs as go
+import yfinance as yf
+import plotly.graph_objects as go
+import requests
+from openai import OpenAI
 
-# API 키
-openai.api_key = st.secrets["openai_api_key"]
-NEWS_API_KEY = st.secrets["newsdata_api_key"]
+# 🔐 API 키 가져오기 (secrets.toml에 저장된 키)
+OPENAI_API_KEY = st.secrets["openai_api_key"]
+NEWSDATA_API_KEY = st.secrets["newsdata_api_key"]
 
-st.title("📈 종목 선택 - 주가 + 뉴스 + GPT 분석")
+# ✅ OpenAI 객체 생성
+client = OpenAI(api_key=OPENAI_API_KEY)
 
+# 🔘 종목 선택
+st.title("📊 종목 뉴스 & 주가 분석 with GPT")
 stock_map = {
     "Apple": "AAPL",
     "Tesla": "TSLA",
@@ -18,67 +21,79 @@ stock_map = {
     "Google": "GOOGL",
     "Microsoft": "MSFT"
 }
-
 stock_name = st.selectbox("분석할 종목을 선택하세요", list(stock_map.keys()))
 ticker = stock_map[stock_name]
 
-# 날짜 범위 선택
+# 📆 날짜 범위 설정
 end_date = datetime.date.today()
-start_date = st.date_input("시작 날짜", end_date - datetime.timedelta(days=90))
+start_date = st.date_input("시작 날짜", value=end_date - datetime.timedelta(days=90))
 
-# 주가 데이터
-data = yf.download(ticker, start=start_date, end=end_date)
-if data.empty:
-    st.error("❌ 주가 데이터를 불러오지 못했습니다. 날짜를 다시 선택해 주세요.")
-else:
-    st.subheader(f"📉 {stock_name} ({ticker}) 주가 차트")
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=data.index, y=data['Close'], mode='lines', name='종가'))
-    fig.update_layout(title=f"{ticker} 주가", xaxis_title="날짜", yaxis_title="가격")
-    st.plotly_chart(fig)
+# 📈 주가 데이터 불러오기
+try:
+    data = yf.download(ticker, start=start_date, end=end_date)
+    if data.empty:
+        st.warning("❗ 주가 데이터를 불러올 수 없습니다. 날짜를 조정하거나 나중에 시도해보세요.")
+    else:
+        data = data.dropna(subset=["Close"])
+        data.reset_index(inplace=True)
 
-# 뉴스 검색
-st.subheader("📰 관련 뉴스 & GPT 분석")
+        # 📊 Plotly 그래프
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=data["Date"], y=data["Close"], mode='lines', name='종가'))
+        fig.update_layout(title=f"{stock_name} 주가 추이", xaxis_title="날짜", yaxis_title="종가")
+        st.plotly_chart(fig)
+except Exception as e:
+    st.error(f"📉 주가 데이터 오류: {e}")
 
-def fetch_news(keyword):
-    url = f"https://newsdata.io/api/1/news?apikey={NEWS_API_KEY}&q={keyword}&language=en"
+# 📰 뉴스 불러오기 함수
+def fetch_news(query):
+    url = f"https://newsdata.io/api/1/news?apikey={NEWSDATA_API_KEY}&q={query}&language=en"
     try:
-        r = requests.get(url)
-        return r.json().get("results", [])
-    except:
+        response = requests.get(url)
+        news = response.json()
+        return news.get("results", [])
+    except Exception as e:
+        st.error(f"뉴스 불러오기 실패: {e}")
         return []
 
+# 🔍 뉴스 분석
+st.subheader("📰 뉴스 기반 GPT 분석")
 news_items = fetch_news(stock_name)
 
 if not news_items:
-    st.warning("뉴스를 불러오지 못했습니다.")
+    st.warning("관련 뉴스를 찾을 수 없습니다.")
 else:
-    for news in news_items[:2]:  # 2개만 표시
-        title = news.get("title", "제목 없음")
-        desc = news.get("description", "설명 없음")
-        st.markdown(f"#### 📰 {title}")
-        st.caption(news.get("pubDate", "날짜 없음"))
+    for article in news_items[:3]:
+        title = article.get("title", "")
+        desc = article.get("description", "")
+        pub_date = article.get("pubDate", "")
+
+        st.markdown(f"### 🗞 {title}")
+        st.caption(pub_date)
         st.write(desc)
 
-        # GPT 분석 요청
+        # GPT 분석
         prompt = f"""
-다음 뉴스는 {stock_name} 관련 기사입니다.
+        다음은 {stock_name}에 대한 뉴스 기사입니다.
 
-제목: {title}
-내용: {desc}
+        제목: {title}
+        내용: {desc}
 
-이 뉴스가 주가에 어떤 영향을 줄 수 있을지, 투자자 입장에서 의미 있는 분석을 300자 이상으로 제공해 주세요.
+        이 뉴스가 {stock_name}의 주가에 미칠 영향을 분석하고,
+        투자자에게 도움이 될 만한 분석을 300자 이상으로 작성하세요.
         """
 
         try:
-            response = openai.ChatCompletion.create(
+            completion = client.chat.completions.create(
                 model="gpt-4",
                 messages=[
-                    {"role": "system", "content": "당신은 전문 금융 애널리스트입니다."},
+                    {"role": "system", "content": "당신은 금융 시장 분석가입니다."},
                     {"role": "user", "content": prompt}
-                ]
+                ],
+                temperature=0.7
             )
-            answer = response["choices"][0]["message"]["content"]
-            st.success(answer)
+            analysis = completion.choices[0].message.content.strip()
+            st.success(analysis)
         except Exception as e:
             st.error(f"GPT 분석 실패: {e}")
+        st.markdown("---")
