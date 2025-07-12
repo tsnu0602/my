@@ -1,48 +1,44 @@
 import streamlit as st
-import yfinance as yf
-import plotly.graph_objects as go
-import datetime
+import requests
 
-st.set_page_config(page_title="📈 주가 차트", layout="centered")
+# API 키 불러오기
+NEWS_API_KEY = st.secrets["newsdata_api_key"]
 
-st.title("📈 종목 주가 차트")
+# 뉴스 검색 함수
+def get_news(query="Apple", language="en", country="us"):
+    url = f"https://newsdata.io/api/1/news?apikey={NEWS_API_KEY}&q={query}&language={language}&country={country}"
 
-# 종목 선택
-stocks = {
-    "Apple": "AAPL",
-    "Tesla": "TSLA",
-    "Amazon": "AMZN",
-    "Google": "GOOGL",
-    "Microsoft": "MSFT"
-}
-selected = st.selectbox("종목 선택", list(stocks.keys()))
-ticker = stocks[selected]
+    try:
+        response = requests.get(url)
+        
+        if response.status_code != 200:
+            st.error(f"❌ 뉴스 API 오류 발생: {response.status_code} - {response.text}")
+            return []
+        
+        data = response.json()
+        if "results" not in data or not data["results"]:
+            st.warning("🔍 뉴스 결과가 없습니다.")
+            return []
 
-# 날짜 선택
-end = datetime.date.today()
-start = st.date_input("시작 날짜", end - datetime.timedelta(days=90))
+        return data["results"]
 
-# 데이터 불러오기
-with st.spinner("주가 데이터 불러오는 중..."):
-    data = yf.download(ticker, start=start, end=end)
+    except Exception as e:
+        st.error(f"⚠️ 뉴스 요청 중 오류 발생: {e}")
+        return []
 
-# 데이터 확인 및 처리
-if data.empty:
-    st.error("❌ 주가 데이터를 불러오지 못했습니다. 날짜 범위나 종목을 확인하세요.")
-else:
-    data = data.dropna(subset=["Close"])
-    data.reset_index(inplace=True)  # datetime index를 칼럼으로 변경
+# 테스트 UI
+st.title("📰 NewsData.io 뉴스 테스트")
 
-    # 차트 생성
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=data['Date'], y=data['Close'], mode='lines', name='종가'))
+stock = st.text_input("🔎 검색할 종목 이름", "Apple")
 
-    fig.update_layout(
-        title=f"{selected} ({ticker}) 주가 차트",
-        xaxis_title="날짜",
-        yaxis_title="가격 (USD)",
-        xaxis_rangeslider_visible=True,
-        template="plotly_white"
-    )
+if st.button("뉴스 불러오기"):
+    news_items = get_news(stock)
 
-    st.plotly_chart(fig, use_container_width=True)
+    if news_items:
+        for news in news_items[:3]:
+            st.subheader(news.get("title", "제목 없음"))
+            st.write(news.get("description", "내용 없음"))
+            st.caption(news.get("pubDate", "날짜 정보 없음"))
+            st.markdown("---")
+    else:
+        st.info("결과가 없거나 오류가 있었습니다.")
