@@ -25,13 +25,14 @@ stock_name = st.selectbox("🔎 분석할 종목을 선택하세요", list(stock
 ticker = stocks[stock_name]
 
 # ✅ 날짜 선택
-end_date = datetime.date.today()
-start_date = st.date_input("시작 날짜", end_date - datetime.timedelta(days=90))
+today = datetime.date.today()
+default_start = today - datetime.timedelta(days=90)
+start_date = st.date_input("시작 날짜", default_start, max_value=today - datetime.timedelta(days=1))
 
 # ✅ 주가 데이터 불러오기
 with st.spinner("📉 주가 데이터를 불러오는 중..."):
     try:
-        stock_data = yf.download(ticker, start=start_date, end=end_date)
+        stock_data = yf.download(ticker, start=start_date, end=today)
     except Exception as e:
         st.error(f"❌ 주가 데이터를 불러오는 데 실패했습니다: {e}")
         stock_data = None
@@ -55,8 +56,8 @@ else:
     st.plotly_chart(fig)
 
 # ✅ 뉴스 불러오기 함수
-def get_news(query="Apple", language="en", country="us"):
-    url = f"https://newsdata.io/api/1/news?apikey={NEWS_API_KEY}&q={query}&language={language}&country={country}"
+def get_news(query="Apple", language="en"):
+    url = f"https://newsdata.io/api/1/news?apikey={NEWS_API_KEY}&q={query}&language={language}"
     try:
         res = requests.get(url)
         if res.status_code != 200:
@@ -69,6 +70,9 @@ def get_news(query="Apple", language="en", country="us"):
 
 # ✅ GPT 분석 함수
 def gpt_analysis(title, content):
+    if not content.strip():
+        return "⚠️ 기사 내용이 부족하여 GPT 분석을 수행할 수 없습니다."
+
     prompt = f"""
     다음은 {stock_name}에 대한 뉴스 기사입니다.
 
@@ -78,8 +82,7 @@ def gpt_analysis(title, content):
     이 뉴스가 {stock_name} 주식에 미칠 영향과 향후 투자 전략을 최소 300자 이상으로 분석해 주세요.
     """
     try:
-        client = openai.OpenAI(api_key=openai.api_key)
-        response = client.chat.completions.create(
+        response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": "당신은 금융 전문 애널리스트입니다."},
@@ -89,7 +92,7 @@ def gpt_analysis(title, content):
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        return f"GPT 분석 실패: {e}"
+        return f"❌ GPT 분석 실패: {e}"
 
 # ✅ 뉴스 섹션
 st.subheader(f"📰 {stock_name} 관련 뉴스 및 GPT 분석")
@@ -101,16 +104,17 @@ else:
     seen_titles = set()
     for article in news_items:
         title = article.get("title", "제목 없음")
-        if title in seen_titles:
+        description = article.get("description", "")
+        if not title or title in seen_titles:
             continue
         seen_titles.add(title)
 
         st.markdown(f"### {title}")
-        st.write(article.get("description", "설명 없음"))
+        st.write(description or "📌 설명이 제공되지 않았습니다.")
         st.caption(f"🕒 {article.get('pubDate', '날짜 없음')}")
         st.markdown(f"[🔗 원문 보기]({article.get('link', '#')})")
 
         with st.spinner("🤖 GPT 분석 중..."):
-            analysis = gpt_analysis(title, article.get("description", ""))
+            analysis = gpt_analysis(title, description)
         st.success(analysis)
         st.markdown("---")
