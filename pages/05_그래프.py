@@ -6,8 +6,8 @@ import numpy as np
 import requests
 
 # 페이지 설정
-st.set_page_config(page_title="뉴스 + 주가 (모의 차트)", layout="wide")
-st.title("📰 뉴스 + 📉 모의 주가 차트 대시보드")
+st.set_page_config(page_title="뉴스 + 주가 (차트)", layout="wide")
+st.title("📰 뉴스 + 📉 차트 대시보드")
 
 # 종목 목록
 stocks = {
