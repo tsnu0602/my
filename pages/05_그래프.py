@@ -1,94 +1,82 @@
 import streamlit as st
-import plotly.graph_objs as go
-import datetime
+import yfinance as yf
 import pandas as pd
-import numpy as np
-import requests
 
-# 페이지 설정
-st.set_page_config(page_title="뉴스 + 주가 (차트)", layout="wide")
-st.title("📰 뉴스 + 📉 차트 대시보드")
+# 종목 리스트
+symbols = [
+    "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "BRK-B", "JPM", "V",
+    "UNH", "HD", "MA", "PYPL", "BAC", "DIS", "ADBE", "CMCSA", "NFLX", "XOM",
+    "PFE", "KO", "PEP", "CSCO", "T", "VZ", "ABT", "MRK", "CRM", "INTC",
+    "WMT", "CVX", "ACN", "AVGO", "COST", "ORCL", "TXN", "NEE", "QCOM", "MDT",
+    "LIN", "TMO", "UPS", "PM", "BA", "IBM", "MMM", "CAT", "RTX", "GE"
+]
 
-# 종목 목록
-stocks = {
-    "Apple": "AAPL",
-    "Tesla": "TSLA",
-    "Amazon": "AMZN",
-    "Google": "GOOGL",
-    "Microsoft": "MSFT"
-}
-stock_name = st.selectbox("🔎 분석할 종목 선택", list(stocks.keys()))
-ticker = stocks[stock_name]
-
-# 날짜 설정
-end_date = datetime.date.today()
-start_date = st.date_input("📅 시작 날짜 선택", end_date - datetime.timedelta(days=90))
-if start_date >= end_date:
-    st.error("⚠️ 시작 날짜는 종료 날짜보다 이전이어야 합니다.")
-    st.stop()
-
-# ✅ 더미 주가 데이터 생성 함수
-@st.cache_data
-def generate_mock_stock_data(start_date, end_date):
-    dates = pd.date_range(start=start_date, end=end_date, freq='B')  # 평일만
-    np.random.seed(42)
-    prices = np.cumsum(np.random.normal(0, 1, len(dates))) + 100  # 모의 주가
-    df = pd.DataFrame({'Date': dates, 'Close': prices})
+@st.cache_data(show_spinner=False)
+def load_data():
+    data = []
+    for symbol in symbols:
+        try:
+            ticker = yf.Ticker(symbol)
+            info = ticker.info
+            data.append({
+                "종목": info.get("shortName", symbol),
+                "티커": symbol,
+                "시가총액": info.get("marketCap", 0),
+                "PER": info.get("forwardPE", None),
+                "EPS": info.get("trailingEps", None),
+                "PBR": info.get("priceToBook", None),
+                "ROE": info.get("returnOnEquity", None),
+                "설명": info.get("longBusinessSummary", "설명 없음"),
+            })
+        except:
+            data.append({
+                "종목": symbol,
+                "티커": symbol,
+                "시가총액": 0,
+                "PER": None,
+                "EPS": None,
+                "PBR": None,
+                "ROE": None,
+                "설명": "설명 없음"
+            })
+    df = pd.DataFrame(data)
+    df = df.sort_values(by="시가총액", ascending=False).reset_index(drop=True)
+    df["시가총액순위"] = df.index + 1
     return df
 
-mock_data = generate_mock_stock_data(start_date, end_date)
-
-# ✅ 주가 차트 표시
-if mock_data.empty:
-    st.warning("📭 주가 데이터가 없습니다.")
-else:
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=mock_data["Date"],
-        y=mock_data["Close"],
-        mode="lines",
-        name=f"{stock_name} 종가 (모의)"
-    ))
-    fig.update_layout(
-        title=f"{stock_name} 주가 차트 (데이터)",
-        xaxis_title="날짜",
-        yaxis_title="가격 (USD)",
-        template="plotly_white",
-        xaxis_rangeslider_visible=True
+def show_marketcap_page(df):
+    st.title("📈 시가총액 Top 기업 분석")
+    min_rank, max_rank = st.slider(
+        "시가총액 순위 범위 선택",
+        min_value=1, max_value=len(df),
+        value=(1, 20)
     )
-    st.plotly_chart(fig, use_container_width=True)
+    selected = df[(df["시가총액순위"] >= min_rank) & (df["시가총액순위"] <= max_rank)]
+    st.write(f"{min_rank}위 부터 {max_rank}위 까지 기업")
+    st.dataframe(selected[["시가총액순위", "종목", "티커", "시가총액"]], use_container_width=True)
 
-# ✅ 뉴스 API 설정
-NEWS_API_KEY = st.secrets["newsdata_api_key"]
+    # ✅ 종목 설명 표시
+    selected_company = st.selectbox("🔍 기업 설명 보기", selected["티커"])
+    company_info = df[df["티커"] == selected_company].iloc[0]
+    st.markdown(f"### 🏢 {company_info['종목']} ({company_info['티커']})")
+    st.write(company_info["설명"])
 
-def get_news(query):
-    url = f"https://newsdata.io/api/1/news?apikey={NEWS_API_KEY}&q={query}&language=en"
-    try:
-        response = requests.get(url)
-        if response.status_code == 200:
-            return response.json().get("results", [])
-        else:
-            st.error(f"❌ 뉴스 API 오류: {response.status_code}")
-            return []
-    except Exception as e:
-        st.error(f"❌ 뉴스 요청 실패: {e}")
-        return []
+def show_growth_value_page(df):
+    st.title("🚀 성장가치 높은 기업 모음")
+    filtered = df[
+        (df["PER"].notnull()) & (df["PER"] <= 30)
+    ].copy()
+    filtered["ROE(%)"] = (filtered["ROE"] * 100).round(2)
+    filtered = filtered.sort_values(by="PER").reset_index(drop=True)
+    st.dataframe(filtered[["종목", "티커", "시가총액", "PER", "EPS", "PBR", "ROE(%)"]], use_container_width=True)
 
-# ✅ 뉴스 섹션
-st.subheader(f"📰 {stock_name} 관련 뉴스")
-news_items = get_news(stock_name)
+def main():
+    df = load_data()
+    page = st.sidebar.radio("페이지 선택", ["시가총액 분석", "성장가치 기업"])
+    if page == "시가총액 분석":
+        show_marketcap_page(df)
+    else:
+        show_growth_value_page(df)
 
-if not news_items:
-    st.info("📭 관련 뉴스가 없습니다.")
-else:
-    for article in news_items:
-        title = article.get("title", "제목 없음")
-        description = article.get("description", "설명 없음")
-        link = article.get("link", "#")
-        pub_date = article.get("pubDate", "날짜 없음")
-
-        st.markdown(f"### {title}")
-        st.write(description)
-        st.caption(f"🕒 {pub_date}")
-        st.markdown(f"[🔗 원문 보기]({link})")
-        st.markdown("---")
+if __name__ == "__main__":
+    main()
