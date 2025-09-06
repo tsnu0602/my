@@ -4,11 +4,5 @@ pandas
 matplotlib
 plotly
 requests
-
-# 뉴스 API 호출용
 newsapi-python
-
-# 날짜 및 시간 처리
 python-dateutil
-openai
-openai>=1.0.0
