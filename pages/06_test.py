@@ -50,19 +50,26 @@ else:
     if price_col is None:
         st.warning(f"⚠️ 주가 데이터에 'Close' 또는 'Adj Close' 컬럼이 없습니다. 현재 컬럼: {list(stock_data.columns)}")
     else:
-        # 결측치 제거
-        stock_data = stock_data.dropna(subset=[price_col])
-        # 그래프 그리기
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=stock_data.index, y=stock_data[price_col], mode="lines", name=price_col))
-        fig.update_layout(
-            title=f"{stock_name} ({ticker}) 주가 차트",
-            xaxis_title="날짜",
-            yaxis_title="가격 (USD)",
-            template="plotly_white",
-            xaxis_rangeslider_visible=True
-        )
-        st.plotly_chart(fig)
+        # 컬럼이 실제로 존재하는지 재확인
+        if price_col in stock_data.columns:
+            # 결측치 제거 - 존재하면 호출, 없으면 안 함
+            stock_data = stock_data.dropna(subset=[price_col])
+        else:
+            st.warning(f"⚠️ '{price_col}' 컬럼이 데이터에 없습니다.")
+        
+        if stock_data.empty:
+            st.warning("📭 주가 데이터가 결측치 제거 후 없습니다.")
+        else:
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=stock_data.index, y=stock_data[price_col], mode="lines", name=price_col))
+            fig.update_layout(
+                title=f"{stock_name} ({ticker}) 주가 차트",
+                xaxis_title="날짜",
+                yaxis_title="가격 (USD)",
+                template="plotly_white",
+                xaxis_rangeslider_visible=True
+            )
+            st.plotly_chart(fig)
 
 # 뉴스 불러오기 함수
 def get_news(query="Apple", language="en"):
