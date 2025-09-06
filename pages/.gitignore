@@ -1,10 +1,4 @@
 .streamlit/secrets.toml
-# API 키가 포함된 파일
-.streamlit/secrets.toml
-
-# Python 캐시 파일
 __pycache__/
 *.pyc
-
-# 환경 파일 (혹시 추가한다면)
 .env
