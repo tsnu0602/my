@@ -1,17 +1,15 @@
 import streamlit as st
-import openai
 import requests
 import yfinance as yf
 import plotly.graph_objs as go
 import datetime
 
 # ✅ API 키 설정
-openai.api_key = st.secrets["openai_api_key"]
 NEWS_API_KEY = st.secrets["newsdata_api_key"]
 
 # ✅ 기본 설정
 st.set_page_config(page_title="📈 종목 분석 대시보드", layout="centered")
-st.title("📊 주가 + 뉴스 + GPT 분석 통합")
+st.title("📊 주가 + 뉴스 통합 대시보드")
 
 # ✅ 종목 선택
 stocks = {
@@ -77,34 +75,8 @@ def get_news(query="Apple", language="en"):
         st.error(f"⚠️ 뉴스 요청 오류: {e}")
         return []
 
-# ✅ GPT 분석 함수
-def gpt_analysis(title, content):
-    if not content.strip():
-        return "⚠️ 기사 내용이 부족하여 GPT 분석을 수행할 수 없습니다."
-
-    prompt = f"""
-    다음은 {stock_name}에 대한 뉴스 기사입니다.
-
-    제목: {title}
-    내용: {content}
-
-    이 뉴스가 {stock_name} 주식에 미칠 영향과 향후 투자 전략을 최소 300자 이상으로 분석해 주세요.
-    """
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "당신은 금융 전문 애널리스트입니다."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        return f"❌ GPT 분석 실패: {e}"
-
 # ✅ 뉴스 섹션
-st.subheader(f"📰 {stock_name} 관련 뉴스 및 GPT 분석")
+st.subheader(f"📰 {stock_name} 관련 뉴스")
 
 news_items = get_news(query=f"{stock_name} stock")
 if not news_items:
@@ -122,8 +94,4 @@ else:
         st.write(description or "📌 설명이 제공되지 않았습니다.")
         st.caption(f"🕒 {article.get('pubDate', '날짜 없음')}")
         st.markdown(f"[🔗 원문 보기]({article.get('link', '#')})")
-
-        with st.spinner("🤖 GPT 분석 중..."):
-            analysis = gpt_analysis(title, description)
-        st.success(analysis)
         st.markdown("---")
