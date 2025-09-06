@@ -2,6 +2,7 @@ import streamlit as st
 import yfinance as yf
 import plotly.graph_objs as go
 import datetime
+import pandas as pd  # pandas import 추가
 
 st.set_page_config(page_title="📈 주가 차트 테스트", layout="centered")
 st.title("주가 차트 테스트")
@@ -18,9 +19,8 @@ if ticker and start_date < end_date:
             if isinstance(stock_data.columns, pd.MultiIndex):
                 st.warning("MultiIndex 컬럼입니다. 단일 레벨로 변환합니다.")
                 stock_data.columns = stock_data.columns.get_level_values(-1)
-            stock_data.columns = [col.capitalize() for col in stock_data.columns]  # 'close' -> 'Close' 등 통일
+            stock_data.columns = [col.capitalize() for col in stock_data.columns]  # 컬럼명 통일
             
-            # 'Close' 컬럼 체크
             if 'Close' not in stock_data.columns:
                 st.error("'Close' 컬럼이 데이터에 없습니다.")
             else:
