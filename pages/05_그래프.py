@@ -50,7 +50,7 @@ else:
         name=f"{stock_name} 종가 (모의)"
     ))
     fig.update_layout(
-        title=f"{stock_name} 주가 차트 (모의 데이터)",
+        title=f"{stock_name} 주가 차트 (데이터)",
         xaxis_title="날짜",
         yaxis_title="가격 (USD)",
         template="plotly_white",
