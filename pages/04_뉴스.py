@@ -37,30 +37,36 @@ with st.spinner("📉 주가 데이터를 불러오는 중..."):
 
 # ✅ 주가 차트 출력 (안정성 보강)
 st.subheader(f"💹 {stock_name} 주가 차트")
+
+# ▶️ 데이터 존재 여부 확인
 if stock_data is None or stock_data.empty:
     st.warning("📭 주가 데이터가 없습니다.")
 else:
-    # 사용 가능한 종가 컬럼 선택
-    price_col = None
+    # ▶️ 'Close' 또는 'Adj Close' 사용 가능한지 확인
     if "Close" in stock_data.columns:
         price_col = "Close"
     elif "Adj Close" in stock_data.columns:
         price_col = "Adj Close"
+    else:
+        price_col = None
 
     if price_col is None:
-        st.warning(f"⚠️ 사용할 수 있는 종가 컬럼이 없습니다. 현재 컬럼: {stock_data.columns.tolist()}")
+        st.warning(f"⚠️ 'Close' 또는 'Adj Close' 컬럼이 존재하지 않습니다. 현재 컬럼: {list(stock_data.columns)}")
     else:
-        stock_data = stock_data.dropna(subset=[price_col]).reset_index()
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=stock_data["Date"], y=stock_data[price_col], mode="lines", name=price_col))
-        fig.update_layout(
-            title=f"{stock_name} ({ticker}) 주가 차트",
-            xaxis_title="날짜",
-            yaxis_title="가격 (USD)",
-            template="plotly_white",
-            xaxis_rangeslider_visible=True
-        )
-        st.plotly_chart(fig)
+        try:
+            stock_data = stock_data.dropna(subset=[price_col]).reset_index()
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=stock_data["Date"], y=stock_data[price_col], mode="lines", name=price_col))
+            fig.update_layout(
+                title=f"{stock_name} ({ticker}) 주가 차트",
+                xaxis_title="날짜",
+                yaxis_title="가격 (USD)",
+                template="plotly_white",
+                xaxis_rangeslider_visible=True
+            )
+            st.plotly_chart(fig)
+        except Exception as e:
+            st.error(f"⚠️ 주가 차트 그리기 중 오류 발생: {e}")
 
 # ✅ 뉴스 불러오기 함수
 def get_news(query="Apple", language="en"):
