@@ -3,55 +3,40 @@ import yfinance as yf
 import plotly.graph_objs as go
 import datetime
 
-st.set_page_config(page_title="📈 주가 차트 테스트", layout="centered")
-st.title("🧪 주가 차트 확인")
+# 페이지 레이아웃을 넓게 설정
+st.set_page_config(layout="wide")
 
 # 종목 선택
-stock_name = st.selectbox("종목을 선택하세요", ["Apple", "Tesla", "Amazon", "Google", "Microsoft"])
-stocks = {
-    "Apple": "AAPL",
-    "Tesla": "TSLA",
-    "Amazon": "AMZN",
-    "Google": "GOOGL",
-    "Microsoft": "MSFT"
-}
+stocks = {"Apple": "AAPL", "Tesla": "TSLA", "Amazon": "AMZN"}
+stock_name = st.selectbox("종목 선택", list(stocks.keys()))
 ticker = stocks[stock_name]
 
 # 날짜 선택
 end_date = datetime.date.today()
-start_date = end_date - datetime.timedelta(days=90)
+start_date = st.date_input("시작 날짜", end_date - datetime.timedelta(days=90))
 
-# 데이터 불러오기
-stock_data = yf.download(ticker, start=start_date, end=end_date)
-
-# 데이터 확인 출력
-st.write("📋 불러온 주가 데이터:")
-st.write(stock_data.head())
-st.write("✅ 컬럼 목록:", stock_data.columns.tolist())
-
-# 차트 그리기
-if stock_data.empty:
-    st.warning("⚠️ 주가 데이터가 비어 있습니다.")
+if start_date >= end_date:
+    st.error("시작 날짜는 종료 날짜보다 이전이어야 합니다.")
 else:
-    # 종가 컬럼 선택
-    price_col = None
-    if "Close" in stock_data.columns:
-        price_col = "Close"
-    elif "Adj Close" in stock_data.columns:
-        price_col = "Adj Close"
+    # 주가 데이터 로드
+    @st.cache_data
+    def load_data(ticker, start, end):
+        df = yf.download(ticker, start=start, end=end, auto_adjust=True, threads=False)
+        return df
 
-    if not price_col:
-        st.error("❌ 'Close' 또는 'Adj Close' 컬럼이 없습니다.")
+    df = load_data(ticker, start_date, end_date)
+
+    if df.empty:
+        st.warning("주가 데이터가 없습니다.")
     else:
-        stock_data = stock_data.dropna(subset=[price_col]).reset_index()
+        # 'Close' 컬럼이 없으면 'Adj Close'로 대체
+        price_col = "Close" if "Close" in df.columns else "Adj Close"
 
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=stock_data["Date"],
-            y=stock_data[price_col],
-            mode="lines",
-            name=price_col
-        ))
+        # 결측치 제거
+        df = df.dropna(subset=[price_col]).reset_index()
+
+        # Plotly 차트 생성
+        fig = go.Figure(go.Scatter(x=df["Date"], y=df[price_col], mode="lines", name=stock_name))
         fig.update_layout(
             title=f"{stock_name} ({ticker}) 주가 차트",
             xaxis_title="날짜",
@@ -59,5 +44,6 @@ else:
             template="plotly_white",
             xaxis_rangeslider_visible=True
         )
-        st.plotly_chart(fig)
 
+        # 차트 표시
+        st.plotly_chart(fig, use_container_width=True)
