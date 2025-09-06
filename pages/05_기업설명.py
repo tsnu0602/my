@@ -1,6 +1,7 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+from googletrans import Translator
 
 # 종목 리스트
 symbols = [
@@ -11,6 +12,17 @@ symbols = [
     "LIN", "TMO", "UPS", "PM", "BA", "IBM", "MMM", "CAT", "RTX", "GE"
 ]
 
+# 번역기 초기화
+translator = Translator()
+
+def translate_text(text, dest='ko'):
+    try:
+        translated = translator.translate(text, dest=dest)
+        return translated.text
+    except Exception as e:
+        return f"번역 실패: {e}"
+
+# 데이터 로드
 @st.cache_data(show_spinner=False)
 def load_data():
     data = []
@@ -26,7 +38,7 @@ def load_data():
                 "EPS": info.get("trailingEps", None),
                 "PBR": info.get("priceToBook", None),
                 "ROE": info.get("returnOnEquity", None),
-                "설명": info.get("longBusinessSummary", "설명 없음"),
+                "설명": info.get("longBusinessSummary", "설명 없음")
             })
         except:
             data.append({
@@ -44,6 +56,7 @@ def load_data():
     df["시가총액순위"] = df.index + 1
     return df
 
+# 시가총액 페이지
 def show_marketcap_page(df):
     st.title("📈 시가총액 Top 기업 분석")
     min_rank, max_rank = st.slider(
@@ -52,15 +65,24 @@ def show_marketcap_page(df):
         value=(1, 20)
     )
     selected = df[(df["시가총액순위"] >= min_rank) & (df["시가총액순위"] <= max_rank)]
-    st.write(f"{min_rank}위 부터 {max_rank}위 까지 기업")
+    st.write(f"📊 {min_rank}위부터 {max_rank}위까지 기업 리스트")
     st.dataframe(selected[["시가총액순위", "종목", "티커", "시가총액"]], use_container_width=True)
 
-    # ✅ 종목 설명 표시
-    selected_company = st.selectbox("🔍 기업 설명 보기", selected["티커"])
-    company_info = df[df["티커"] == selected_company].iloc[0]
+    # ✅ 선택한 기업 설명 번역 표시
+    selected_ticker = st.selectbox("🔍 기업 설명 보기", selected["티커"])
+    company_info = df[df["티커"] == selected_ticker].iloc[0]
     st.markdown(f"### 🏢 {company_info['종목']} ({company_info['티커']})")
-    st.write(company_info["설명"])
 
+    original_desc = company_info["설명"]
+    translated_desc = translate_text(original_desc)
+
+    with st.expander("📘 기업 설명 원문 (영어)"):
+        st.write(original_desc)
+
+    st.write("📖 한글 번역:")
+    st.success(translated_desc)
+
+# 성장가치 페이지
 def show_growth_value_page(df):
     st.title("🚀 성장가치 높은 기업 모음")
     filtered = df[
@@ -70,7 +92,9 @@ def show_growth_value_page(df):
     filtered = filtered.sort_values(by="PER").reset_index(drop=True)
     st.dataframe(filtered[["종목", "티커", "시가총액", "PER", "EPS", "PBR", "ROE(%)"]], use_container_width=True)
 
+# 메인
 def main():
+    st.set_page_config(page_title="미국 주식 기업 분석", layout="wide")
     df = load_data()
     page = st.sidebar.radio("페이지 선택", ["시가총액 분석", "성장가치 기업"])
     if page == "시가총액 분석":
