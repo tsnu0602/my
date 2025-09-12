@@ -18,7 +18,7 @@ ticker = stock_map[stock_name]
 
 # 날짜 선택 (기본: 최근 6개월)
 end_date = datetime.date.today()
-start_date = st.date_input("시작 날짜 선택", end_date - datetime.timedelta(days=180))
+start_date = st.date_input("시작 날짜 선택", end_date - datetime.timedelta(days=365))
 
 # 주가 데이터 가져오기
 stock_data = yf.download(ticker, start=start_date, end=end_date)
