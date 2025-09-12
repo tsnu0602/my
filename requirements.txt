@@ -8,3 +8,5 @@ newsapi-python
 python-dateutil
 numpy
 googletrans==4.0.0-rc1
+streamlit
+openai>=1.0.0
