@@ -6,7 +6,7 @@ NEWS_API_KEY = st.secrets["newsdata_api_key"]
 
 # ✅ 기본 설정
 st.set_page_config(page_title="📰 뉴스", layout="centered")
-st.title("📰 뉴스 기반 종목 정보 (분석 제외)")
+st.title("📰 뉴스 기반 종목 정보")
 
 # ✅ 종목 선택
 stocks = ["Apple", "Tesla", "Amazon", "Google", "Microsoft"]
