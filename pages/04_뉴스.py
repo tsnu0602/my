@@ -1,58 +1,19 @@
 import streamlit as st
 import openai
 import requests
-import yfinance as yf
-import plotly.graph_objs as go
 import datetime
 
-# ✅ API 키 설정
+# ✅ API 키 설정 (secrets.toml에 저장되어 있어야 함)
 openai.api_key = st.secrets["openai_api_key"]
 NEWS_API_KEY = st.secrets["newsdata_api_key"]
 
 # ✅ 기본 설정
-st.set_page_config(page_title="📈 종목 분석 대시보드", layout="centered")
-st.title("📊 주가 + 뉴스 + GPT 분석 통합")
+st.set_page_config(page_title="📊 뉴스 + GPT 분석", layout="centered")
+st.title("📰 뉴스 기반 종목 분석 (주가 제외)")
 
 # ✅ 종목 선택
-stocks = {
-    "Apple": "AAPL",
-    "Tesla": "TSLA",
-    "Amazon": "AMZN",
-    "Google": "GOOGL",
-    "Microsoft": "MSFT"
-}
-stock_name = st.selectbox("🔎 분석할 종목을 선택하세요", list(stocks.keys()))
-ticker = stocks[stock_name]
-
-# ✅ 날짜 선택
-end_date = datetime.date.today()
-start_date = st.date_input("시작 날짜", end_date - datetime.timedelta(days=90))
-
-# ✅ 주가 데이터 불러오기
-with st.spinner("📉 주가 데이터를 불러오는 중..."):
-    try:
-        stock_data = yf.download(ticker, start=start_date, end=end_date)
-    except Exception as e:
-        st.error(f"❌ 주가 데이터를 불러오는 데 실패했습니다: {e}")
-        stock_data = None
-
-# ✅ 주가 차트 출력
-if stock_data is None or stock_data.empty:
-    st.warning("📭 주가 데이터가 없습니다.")
-elif "Close" not in stock_data.columns:
-    st.warning(f"⚠️ 'Close' 컬럼이 없습니다. 현재 컬럼: {stock_data.columns.tolist()}")
-else:
-    stock_data = stock_data.dropna(subset=["Close"]).reset_index()
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=stock_data["Date"], y=stock_data["Close"], mode="lines", name="종가"))
-    fig.update_layout(
-        title=f"{stock_name} ({ticker}) 주가 차트",
-        xaxis_title="날짜",
-        yaxis_title="가격 (USD)",
-        template="plotly_white",
-        xaxis_rangeslider_visible=True
-    )
-    st.plotly_chart(fig)
+stocks = ["Apple", "Tesla", "Amazon", "Google", "Microsoft"]
+stock_name = st.selectbox("🔎 분석할 종목을 선택하세요", stocks)
 
 # ✅ 뉴스 불러오기 함수
 def get_news(query="Apple", language="en", country="us"):
